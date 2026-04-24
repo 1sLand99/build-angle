@@ -37,6 +37,12 @@ if exist "%ProgramFiles%\7-Zip\7z.exe" (
   set SZIP=7za.exe
 )
 
+for /f "tokens=*" %%i in ('"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.VisualStudio.Workload.NativeDesktop -property installationPath') do set VS=%%i
+if "%VS%" equ "" (
+  echo ERROR: Visual Studio installation not found
+  exit /b 1
+)
+
 rem
 rem get depot tools
 rem
@@ -57,23 +63,14 @@ if "%ANGLE_COMMIT%" equ "" (
 )
 
 if not exist angle (
-  mkdir angle
-  pushd angle
-  call git init .                                                          || exit /b 1
-  call git remote add origin https://chromium.googlesource.com/angle/angle || exit /b 1
-  popd
+  call git init angle                                                               || exit /b 1
+  call git -C angle remote add origin https://chromium.googlesource.com/angle/angle || exit /b 1
 )
+
+call git -C angle fetch --no-recurse-submodules origin %ANGLE_COMMIT% || exit /b 1
+call git -C angle reset --hard FETCH_HEAD                             || exit /b 1
 
 pushd angle
-
-if exist build (
-  pushd build
-  call git reset --hard HEAD
-  popd
-)
-
-call git fetch origin %ANGLE_COMMIT% || exit /b 1
-call git checkout --force FETCH_HEAD || exit /b 1
 
 python.exe scripts\bootstrap.py || exit /b 1
 
@@ -90,33 +87,43 @@ pushd angle
 
 call gn gen out/%ARCH% --args="target_cpu=""%ARCH%"" angle_build_all=false is_debug=false angle_has_frame_capture=false angle_enable_gl=false angle_enable_vulkan=false angle_enable_wgpu=false angle_enable_d3d9=false angle_enable_null=false use_siso=false" || exit /b 1
 "C:\Program Files\Git\usr\bin\sed.exe" -i.bak -e "s/\/MD/\/MT/" build\config\win\BUILD.gn || exit /b 1
+
+set CL=/Zi /Wv:18
+set LINK=/OPT:REF /OPT:ICF /DEBUG /PDBALTPATH:%%_PDB%%
 call autoninja --offline -C out/%ARCH% libEGL libGLESv2 libGLESv1_CM || exit /b 1
 
 popd
 
 rem *** prepare output folder ***
 
-mkdir angle-%ARCH%
-mkdir angle-%ARCH%\bin
-mkdir angle-%ARCH%\lib
-mkdir angle-%ARCH%\include
+call "%VS%\Common7\Tools\VsDevCmd.bat" -arch=%ARCH% -startdir=none -no_logo || exit /b 1
+set PATH="%WindowsSdkDir%\Debuggers\x64";%PATH%
+
+mkdir angle-%ARCH%         1>nul
+mkdir angle-%ARCH%\bin     1>nul
+mkdir angle-%ARCH%\lib     1>nul
+mkdir angle-%ARCH%\include 1>nul
 
 echo %ANGLE_COMMIT% > angle-%ARCH%\commit.txt
 
-copy /y angle\out\%ARCH%\d3dcompiler_47.dll angle-%ARCH%\bin 1>nul 2>nul
-copy /y angle\out\%ARCH%\libEGL.dll         angle-%ARCH%\bin 1>nul 2>nul
-copy /y angle\out\%ARCH%\libGLESv1_CM.dll   angle-%ARCH%\bin 1>nul 2>nul
-copy /y angle\out\%ARCH%\libGLESv2.dll      angle-%ARCH%\bin 1>nul 2>nul
+copy /y angle\out\%ARCH%\d3dcompiler_47.dll          angle-%ARCH%\bin                         1>nul 2>nul
+copy /y angle\out\%ARCH%\libEGL.dll                  angle-%ARCH%\bin                         1>nul 2>nul
+copy /y angle\out\%ARCH%\libGLESv1_CM.dll            angle-%ARCH%\bin                         1>nul 2>nul
+copy /y angle\out\%ARCH%\libGLESv2.dll               angle-%ARCH%\bin                         1>nul 2>nul
 
-copy /y angle\out\%ARCH%\libEGL.dll.lib       angle-%ARCH%\lib 1>nul 2>nul
-copy /y angle\out\%ARCH%\libGLESv1_CM.dll.lib angle-%ARCH%\lib 1>nul 2>nul
-copy /y angle\out\%ARCH%\libGLESv2.dll.lib    angle-%ARCH%\lib 1>nul 2>nul
+pdbcopy.exe angle\out\%ARCH%\libEGL.dll.pdb          angle-%ARCH%\bin\libEGL.dll.pdb       -p 1>nul 2>nul
+pdbcopy.exe angle\out\%ARCH%\libGLESv1_CM.dll.pdb    angle-%ARCH%\bin\libGLESv1_CM.dll.pdb -p 1>nul 2>nul
+pdbcopy.exe angle\out\%ARCH%\libGLESv2.dll.pdb       angle-%ARCH%\bin\libGLESv2.dll.pdb    -p 1>nul 2>nul
 
-xcopy /D /S /I /Q /Y angle\include\KHR   angle-%ARCH%\include\KHR   1>nul 2>nul
-xcopy /D /S /I /Q /Y angle\include\EGL   angle-%ARCH%\include\EGL   1>nul 2>nul
-xcopy /D /S /I /Q /Y angle\include\GLES  angle-%ARCH%\include\GLES  1>nul 2>nul
-xcopy /D /S /I /Q /Y angle\include\GLES2 angle-%ARCH%\include\GLES2 1>nul 2>nul
-xcopy /D /S /I /Q /Y angle\include\GLES3 angle-%ARCH%\include\GLES3 1>nul 2>nul
+copy /y angle\out\%ARCH%\libEGL.dll.lib              angle-%ARCH%\lib                         1>nul 2>nul
+copy /y angle\out\%ARCH%\libGLESv1_CM.dll.lib        angle-%ARCH%\lib                         1>nul 2>nul
+copy /y angle\out\%ARCH%\libGLESv2.dll.lib           angle-%ARCH%\lib                         1>nul 2>nul
+
+xcopy /D /S /I /Q /Y angle\include\KHR               angle-%ARCH%\include\KHR                 1>nul 2>nul
+xcopy /D /S /I /Q /Y angle\include\EGL               angle-%ARCH%\include\EGL                 1>nul 2>nul
+xcopy /D /S /I /Q /Y angle\include\GLES              angle-%ARCH%\include\GLES                1>nul 2>nul
+xcopy /D /S /I /Q /Y angle\include\GLES2             angle-%ARCH%\include\GLES2               1>nul 2>nul
+xcopy /D /S /I /Q /Y angle\include\GLES3             angle-%ARCH%\include\GLES3               1>nul 2>nul
 
 del /Q /S angle-%ARCH%\include\*.clang-format angle-%ARCH%\include\*.md 1>nul 2>nul
 
