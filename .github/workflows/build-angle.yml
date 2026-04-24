@@ -3,7 +3,7 @@ name: build-angle
 
 on:
   schedule:
-    - cron: "0 0 * * 0"
+    - cron: "0 23 * * 6"
   push:
     branches:
       - main
@@ -33,12 +33,7 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v4
-
-      #- name: Install Windows SDK v10.0.26100.0
-      #  shell: cmd
-      #  run: |
-      #    "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" modify --installPath "C:\Program Files\Microsoft Visual Studio\2022\Enterprise" --quiet --force --norestart --add Microsoft.VisualStudio.Component.Windows11SDK.26100
+        uses: actions/checkout@v6
 
       - name: Run Build Script
         id: build
@@ -46,7 +41,7 @@ jobs:
         run: call build.cmd ${{ matrix.arch }}
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: angle-${{ matrix.arch }}-${{ needs.info.outputs.BUILD_DATE }}
           path: angle-${{ matrix.arch }}-${{ needs.info.outputs.BUILD_DATE }}.zip
@@ -68,7 +63,7 @@ jobs:
           gh release create ${{ needs.info.outputs.BUILD_DATE }} -R "${GITHUB_REPOSITORY}" -t '${{ needs.info.outputs.BUILD_DATE }}' -F notes.txt
 
       - name: Get Artifacts From Build Steps
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: angle-*-${{ needs.info.outputs.BUILD_DATE }}
           merge-multiple: true
